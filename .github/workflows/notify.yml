@@ -6,7 +6,7 @@ on:
   workflow_dispatch:          # lets you click "Run workflow" manually
 
 permissions:
-  contents: write             # needed to save sent.json back to the repo
+  contents: read
 
 concurrency:
   group: notifier
@@ -17,46 +17,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main           # always latest code + sent.json, even when re-running an old run
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+
+      # sent.json (which reminders already went out) lives in the Actions cache,
+      # not in git. Cache keys are immutable, so each run saves a new entry and
+      # the next run restores the most recent one via the prefix.
+      - name: Restore sent notifications
+        uses: actions/cache/restore@v4
+        with:
+          path: sent.json
+          key: sent-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: sent-
+
       - run: python notify.py
         env:
           GS_EMAIL: ${{ secrets.GS_EMAIL }}
           GS_PASSWORD: ${{ secrets.GS_PASSWORD }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           CANVAS_ICS_URL: ${{ secrets.CANVAS_ICS_URL }}
-      - name: Save which notifications were sent
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898732+github-actions[bot]@users.noreply.github.com"
-          # Keep this run's sent.json, then replay it on top of the latest main.
-          # Retries cover pushes that land mid-run (stale checkout -> "fetch first").
-          cp sent.json "$RUNNER_TEMP/sent.json"
-          for attempt in 1 2 3 4 5; do
-            if ! git fetch origin main; then
-              echo "Fetch failed (attempt $attempt); retrying..."
-              sleep $((attempt * 3))
-              continue
-            fi
-            git reset --hard origin/main
-            cp "$RUNNER_TEMP/sent.json" sent.json
-            if git diff --quiet -- sent.json; then
-              echo "sent.json unchanged; nothing to save."
-              exit 0
-            fi
-            git add sent.json
-            git commit -m "Update sent notifications"
-            # HEAD:main works even from a detached HEAD.
-            if git push origin HEAD:main; then
-              exit 0
-            fi
-            echo "Push rejected (attempt $attempt); retrying..."
-            sleep $((attempt * 3))
-          done
-          echo "Could not save sent.json after 5 attempts." >&2
-          exit 1
+          NOTIFY_HOURS: ${{ vars.NOTIFY_HOURS }}
+          TIMEZONE: ${{ vars.TIMEZONE }}
+          COURSE_NICKNAMES: ${{ vars.COURSE_NICKNAMES }}
+
+      # Save even if one source failed, so the other's reminders aren't resent.
+      - name: Save sent notifications
+        if: always() && hashFiles('sent.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: sent.json
+          key: sent-${{ github.run_id }}-${{ github.run_attempt }}

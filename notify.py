@@ -1,10 +1,18 @@
-"""Send ntfy push notifications 24h and 12h before Gradescope and BruinLearn deadlines.
+"""Send ntfy push notifications before Gradescope and Canvas deadlines.
 
 Gradescope: logs in and skips assignments you've already submitted.
-BruinLearn (Canvas): reads your private calendar feed (.ics). The feed has no
-submission info, so items are skipped only if they're also on Gradescope.
+Canvas (e.g. UCLA's BruinLearn): reads your private calendar feed (.ics). The
+feed has no submission info, so items are skipped only if they're also on
+Gradescope.
 
-Env vars: GS_EMAIL, GS_PASSWORD, NTFY_TOPIC, CANVAS_ICS_URL
+Env vars (see README.md):
+    NTFY_TOPIC        required
+    GS_EMAIL, GS_PASSWORD   Gradescope login (optional if you only use Canvas)
+    CANVAS_ICS_URL    Canvas calendar feed URL (optional)
+    NOTIFY_HOURS      hours before the deadline to notify, default "24,12"
+    TIMEZONE          IANA timezone for all-day Canvas deadlines,
+                      default "America/Los_Angeles"
+    COURSE_NICKNAMES  optional short names, e.g. "LS 7A=7A, COM SCI-131=131"
 Usage:
     python notify.py          # normal run (meant for a cron / GitHub Actions)
     python notify.py --test   # list upcoming assignments and send a test push
@@ -22,24 +30,28 @@ from zoneinfo import ZoneInfo
 import requests
 from gradescopeapi.classes.connection import GSConnection
 
-THRESHOLDS_HOURS = [24, 12]
+# Not committed: GitHub Actions persists it between runs with actions/cache.
 STATE_FILE = Path(__file__).parent / "sent.json"
-LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 BASE_URL = "https://www.gradescope.com"
 
-# Short names for the notification body: if the key appears in Gradescope's
-# course name, show the value instead. Unmatched courses show the full name.
-COURSE_NICKNAMES = {
-    "LS 7A": "7A",
-    "LIFESCI-7A": "7A",
-    "EPS SCI-17": "17",
-    "COM SCI-131": "131",
-    "M117": "M117",
-}
+
+def parse_hours(value):
+    return sorted({float(h) for h in value.split(",") if h.strip()}, reverse=True)
 
 
-def short_course_name(name):
-    for key, nickname in COURSE_NICKNAMES.items():
+def parse_nicknames(value):
+    """Parse "KEY=nick, KEY2=nick2" into a dict."""
+    nicknames = {}
+    for pair in value.split(","):
+        if "=" in pair:
+            key, nick = pair.split("=", 1)
+            nicknames[key.strip()] = nick.strip()
+    return nicknames
+
+
+def short_course_name(name, nicknames):
+    """If a nickname key appears in the course name, show the nickname instead."""
+    for key, nickname in nicknames.items():
         if key in name:
             return nickname
     return name
@@ -130,8 +142,8 @@ def ics_unescape(value):
     return re.sub(r"\\([,;\\])", r"\1", value).replace("\\n", " ")
 
 
-def fetch_canvas(ics_url, skip_names):
-    """Return upcoming BruinLearn assignments from the calendar feed."""
+def fetch_canvas(ics_url, skip_names, local_tz):
+    """Return upcoming Canvas assignments from the calendar feed."""
     resp = requests.get(ics_url, timeout=30)
     resp.raise_for_status()
     now = datetime.now(timezone.utc)
@@ -148,14 +160,14 @@ def fetch_canvas(ics_url, skip_names):
         else:
             # Canvas exports assignments due at 11:59 PM as all-day events.
             day = datetime.strptime(start, "%Y%m%d").date()
-            due = datetime.combine(day, time(23, 59), LOCAL_TZ)
+            due = datetime.combine(day, time(23, 59), local_tz)
         if due <= now:
             continue
 
         # SUMMARY looks like "Assignment name [COURSE-A / COURSE-B]"
         summary = ics_unescape(ev.get("SUMMARY", ""))
         m = re.match(r"(.*?)\s*\[([^\]]*)\]\s*$", summary)
-        name, course = (m.group(1), m.group(2).split(" / ")[0]) if m else (summary, "BruinLearn")
+        name, course = (m.group(1), m.group(2).split(" / ")[0]) if m else (summary, "Canvas")
         if normalize(name) in skip_names:
             continue  # already tracked via Gradescope (which knows if it's submitted)
 
@@ -172,23 +184,30 @@ def fetch_canvas(ics_url, skip_names):
 
 def main():
     load_env_file()
-    email = os.environ["GS_EMAIL"]
-    password = os.environ["GS_PASSWORD"]
     topic = os.environ["NTFY_TOPIC"]
+    email = os.environ.get("GS_EMAIL")
+    password = os.environ.get("GS_PASSWORD")
     canvas_url = os.environ.get("CANVAS_ICS_URL")
+    thresholds = parse_hours(os.environ.get("NOTIFY_HOURS") or "24,12")
+    local_tz = ZoneInfo(os.environ.get("TIMEZONE") or "America/Los_Angeles")
+    nicknames = parse_nicknames(os.environ.get("COURSE_NICKNAMES") or "")
     test_mode = "--test" in sys.argv
+
+    if not (email and password) and not canvas_url:
+        sys.exit("Set GS_EMAIL + GS_PASSWORD and/or CANVAS_ICS_URL.")
 
     # Fetch each source independently so one breaking doesn't silence the other.
     upcoming, gs_names, failed = [], set(), False
-    try:
-        gs_upcoming, gs_names = fetch_gradescope(email, password)
-        upcoming += gs_upcoming
-    except Exception:
-        traceback.print_exc()
-        failed = True
+    if email and password:
+        try:
+            gs_upcoming, gs_names = fetch_gradescope(email, password)
+            upcoming += gs_upcoming
+        except Exception:
+            traceback.print_exc()
+            failed = True
     if canvas_url:
         try:
-            upcoming += fetch_canvas(canvas_url, gs_names)
+            upcoming += fetch_canvas(canvas_url, gs_names, local_tz)
         except Exception:
             traceback.print_exc()
             failed = True
@@ -213,14 +232,15 @@ def main():
         if sent.get("due") != due_iso:
             sent = {"due": due_iso, "sent": []}
 
-        crossed = [t for t in THRESHOLDS_HOURS if hours_left <= t]
+        crossed = [t for t in thresholds if hours_left <= t]
         if crossed and any(t not in sent["sent"] for t in crossed):
             push(
                 topic,
                 title=f"Due in {hours_left:.0f}h: {a['name']}",
-                message=short_course_name(a['course']),
+                message=short_course_name(a["course"], nicknames),
                 click_url=a["url"],
-                priority="urgent" if min(crossed) <= 12 else "high",
+                # The last reminder before the deadline is the urgent one.
+                priority="urgent" if min(crossed) == thresholds[-1] else "high",
             )
             print(f"Notified: {a['course']} / {a['name']} ({hours_left:.1f}h left)")
             sent["sent"] = sorted(set(sent["sent"]) | set(crossed))
