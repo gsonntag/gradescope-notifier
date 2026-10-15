@@ -46,5 +46,7 @@ touch .env               # then put the variables above in .env as KEY=value lin
 python notify.py --test   # lists upcoming assignments and sends a test push
 ```
 
-Which reminders have been sent is kept in `sent.json`. On GitHub Actions it is
-stored in the Actions cache between runs rather than committed to the repo.
+Which reminders have been sent is kept in `sent.json`. On GitHub Actions the
+workflow commits it back to `main` whenever it changes. Those commits also
+count as repo activity, which stops GitHub from disabling the schedule after
+60 days.

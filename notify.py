@@ -30,7 +30,7 @@ from zoneinfo import ZoneInfo
 import requests
 from gradescopeapi.classes.connection import GSConnection
 
-# Not committed: GitHub Actions persists it between runs with actions/cache.
+# GitHub Actions commits this back to the repo after each run that changes it.
 STATE_FILE = Path(__file__).parent / "sent.json"
 BASE_URL = "https://www.gradescope.com"
 
