@@ -34,6 +34,7 @@ jobs:
           TIMEZONE: ${{ vars.TIMEZONE }}
           COURSE_NICKNAMES: ${{ vars.COURSE_NICKNAMES }}
       - name: Save which notifications were sent
+        if: success() || failure()   # save even if one source errored, so pushes aren't repeated
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898732+github-actions[bot]@users.noreply.github.com"

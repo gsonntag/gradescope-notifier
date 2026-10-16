@@ -9,7 +9,7 @@ Env vars (see README.md):
     NTFY_TOPIC        required
     GS_EMAIL, GS_PASSWORD   Gradescope login (optional if you only use Canvas)
     CANVAS_ICS_URL    Canvas calendar feed URL (optional)
-    NOTIFY_HOURS      hours before the deadline to notify, default "24,12"
+    NOTIFY_HOURS      hours before the deadline to notify, default "168,72,24,12"
     TIMEZONE          IANA timezone for all-day Canvas deadlines,
                       default "America/Los_Angeles"
     COURSE_NICKNAMES  optional short names, e.g. "LS 7A=7A, COM SCI-131=131"
@@ -112,6 +112,7 @@ def fetch_gradescope(email, password):
             upcoming.append(
                 {
                     "key": f"{course_id}:{a.assignment_id or a.name}",
+                    "source": "gradescope",
                     "course": course.name,
                     "name": a.name.strip(),
                     "due": a.due_date,
@@ -177,9 +178,22 @@ def fetch_canvas(ics_url, skip_names, local_tz):
             url = f"{link.group(1)}/courses/{link.group(2)}/assignments/{link.group(3)}"
 
         upcoming.append(
-            {"key": f"canvas:{uid}", "course": course, "name": name, "due": due, "url": url}
+            {"key": f"canvas:{uid}", "source": "canvas", "course": course, "name": name,
+             "due": due, "url": url}
         )
     return upcoming
+
+
+def time_left(hours):
+    return f"{hours / 24:.0f}d" if hours >= 47.5 else f"{hours:.0f}h"
+
+
+def load_state():
+    """Return (sources seen before, {assignment key: {due, sent, name, source}})."""
+    data = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
+    if "assignments" not in data:  # old format: just the assignments dict
+        data = {"assignments": data}
+    return set(data.get("seeded", [])), data["assignments"]
 
 
 def main():
@@ -188,7 +202,7 @@ def main():
     email = os.environ.get("GS_EMAIL")
     password = os.environ.get("GS_PASSWORD")
     canvas_url = os.environ.get("CANVAS_ICS_URL")
-    thresholds = parse_hours(os.environ.get("NOTIFY_HOURS") or "24,12")
+    thresholds = parse_hours(os.environ.get("NOTIFY_HOURS") or "168,72,24,12")
     local_tz = ZoneInfo(os.environ.get("TIMEZONE") or "America/Los_Angeles")
     nicknames = parse_nicknames(os.environ.get("COURSE_NICKNAMES") or "")
     test_mode = "--test" in sys.argv
@@ -196,18 +210,27 @@ def main():
     if not (email and password) and not canvas_url:
         sys.exit("Set GS_EMAIL + GS_PASSWORD and/or CANVAS_ICS_URL.")
 
+    seeded, state = load_state()
+
     # Fetch each source independently so one breaking doesn't silence the other.
-    upcoming, gs_names, failed = [], set(), False
+    upcoming, gs_names, fetched, failed = [], set(), set(), False
     if email and password:
         try:
             gs_upcoming, gs_names = fetch_gradescope(email, password)
             upcoming += gs_upcoming
+            fetched.add("gradescope")
         except Exception:
             traceback.print_exc()
             failed = True
     if canvas_url:
+        # Also skip names from earlier Gradescope runs, in case Gradescope is down now.
+        gs_names |= {
+            normalize(v["name"]) for v in state.values()
+            if v.get("source") == "gradescope" and "name" in v
+        }
         try:
             upcoming += fetch_canvas(canvas_url, gs_names, local_tz)
+            fetched.add("canvas")
         except Exception:
             traceback.print_exc()
             failed = True
@@ -222,11 +245,21 @@ def main():
         print("Test notification sent.")
         return
 
-    state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
-
     for a in upcoming:
         hours_left = (a["due"] - now).total_seconds() / 3600
         due_iso = a["due"].isoformat()
+        # The first successful fetch of a source just records what's there, so
+        # setting this up doesn't announce every existing assignment as new.
+        if a["key"] not in state and a["source"] in seeded:
+            due_local = a["due"].astimezone(local_tz).strftime("%a %b %-d, %-I:%M %p")
+            push(
+                topic,
+                title=f"New: {a['name']}",
+                message=f"{short_course_name(a['course'], nicknames)} · due {due_local}",
+                click_url=a["url"],
+                priority="default",
+            )
+            print(f"New assignment: {a['course']} / {a['name']}")
         sent = state.get(a["key"], {})
         # If the due date changed (e.g. extension), reset what we've sent.
         if sent.get("due") != due_iso:
@@ -236,7 +269,7 @@ def main():
         if crossed and any(t not in sent["sent"] for t in crossed):
             push(
                 topic,
-                title=f"Due in {hours_left:.0f}h: {a['name']}",
+                title=f"Due in {time_left(hours_left)}: {a['name']}",
                 message=short_course_name(a["course"], nicknames),
                 click_url=a["url"],
                 # The last reminder before the deadline is the urgent one.
@@ -244,6 +277,7 @@ def main():
             )
             print(f"Notified: {a['course']} / {a['name']} ({hours_left:.1f}h left)")
             sent["sent"] = sorted(set(sent["sent"]) | set(crossed))
+        sent.update(name=a["name"], source=a["source"])
         state[a["key"]] = sent
 
     # Drop entries whose deadline has passed.
@@ -251,7 +285,8 @@ def main():
         k: v for k, v in state.items()
         if datetime.fromisoformat(v["due"]) > now
     }
-    STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+    data = {"seeded": sorted(seeded | fetched), "assignments": state}
+    STATE_FILE.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 
     if failed:
         sys.exit(1)  # makes the GitHub Actions run show red so you get an email
