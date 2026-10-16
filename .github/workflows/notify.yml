@@ -3,7 +3,7 @@ name: Deadline notifier
 on:
   schedule:
     - cron: "*/30 * * * *"   # every 30 minutes (GitHub may run it a bit late)
-  workflow_dispatch:          # lets you click "Run workflow" manually
+  workflow_dispatch:          # lets you click "Run workflow" manually (or: gh workflow run notify.yml)
 
 permissions:
   contents: write             # needed to save sent.json back to the repo
