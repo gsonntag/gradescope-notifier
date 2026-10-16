@@ -1,1 +1,42 @@
-{}
+{
+  "assignments": {
+    "1408164:8837471": {
+      "due": "2026-10-21T23:00:00-07:00",
+      "name": "Homework #2",
+      "sent": [
+        168.0
+      ],
+      "source": "gradescope"
+    },
+    "1415616:8746068": {
+      "due": "2026-10-21T21:59:00-07:00",
+      "name": "Homework 2",
+      "sent": [
+        168.0
+      ],
+      "source": "gradescope"
+    },
+    "canvas:event-assignment-2049887": {
+      "due": "2026-11-04T01:00:00+00:00",
+      "name": "Writing Assignment 2",
+      "sent": [],
+      "source": "canvas"
+    },
+    "canvas:event-assignment-2049889": {
+      "due": "2026-11-21T01:00:00+00:00",
+      "name": "Writing Assignment 3",
+      "sent": [],
+      "source": "canvas"
+    },
+    "canvas:event-assignment-2049890": {
+      "due": "2026-12-03T17:00:00+00:00",
+      "name": "Section Participation & Presentation",
+      "sent": [],
+      "source": "canvas"
+    }
+  },
+  "seeded": [
+    "canvas",
+    "gradescope"
+  ]
+}
