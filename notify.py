@@ -9,7 +9,7 @@ Env vars (see README.md):
     NTFY_TOPIC        required
     GS_EMAIL, GS_PASSWORD   Gradescope login (optional if you only use Canvas)
     CANVAS_ICS_URL    Canvas calendar feed URL (optional)
-    NOTIFY_HOURS      hours before the deadline to notify, default "168,72,24,12"
+    NOTIFY_HOURS      hours before the deadline to notify, default "168,72,48,24,12"
     TIMEZONE          IANA timezone for all-day Canvas deadlines,
                       default "America/Los_Angeles"
     COURSE_NICKNAMES  optional short names, e.g. "LS 7A=7A, COM SCI-131=131"
@@ -202,7 +202,7 @@ def main():
     email = os.environ.get("GS_EMAIL")
     password = os.environ.get("GS_PASSWORD")
     canvas_url = os.environ.get("CANVAS_ICS_URL")
-    thresholds = parse_hours(os.environ.get("NOTIFY_HOURS") or "168,72,24,12")
+    thresholds = parse_hours(os.environ.get("NOTIFY_HOURS") or "168,72,48,24,12")
     local_tz = ZoneInfo(os.environ.get("TIMEZONE") or "America/Los_Angeles")
     nicknames = parse_nicknames(os.environ.get("COURSE_NICKNAMES") or "")
     test_mode = "--test" in sys.argv
