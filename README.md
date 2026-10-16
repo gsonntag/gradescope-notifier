@@ -1,7 +1,7 @@
 # Gradescope / Canvas deadline notifier
 
 Sends a push notification to your phone (via [ntfy](https://ntfy.sh)) before
-your Gradescope and Canvas deadlines — 1 week, 3 days, 2 days, 1 day and 12h before by default. Gradescope
+your Gradescope and Canvas deadlines — 1 week, 3 days, 2 days, 1 day, 12h, 6h and 3h before by default. Gradescope
 assignments you've already submitted are skipped.
 
 ## Setup
@@ -22,7 +22,7 @@ assignments you've already submitted are skipped.
 
    | Variable           | Default               | Example                       |
    | ------------------ | --------------------- | ----------------------------- |
-   | `NOTIFY_HOURS`     | `168,72,48,24,12`     | `48,24,3`                     |
+   | `NOTIFY_HOURS`     | `168,72,48,24,12,6,3` | `48,24,3`                     |
    | `TIMEZONE`         | `America/Los_Angeles` | `America/New_York`            |
    | `COURSE_NICKNAMES` | none                  | `LS 7A=7A, COM SCI-131=131`   |
 
