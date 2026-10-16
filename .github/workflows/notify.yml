@@ -30,6 +30,9 @@ jobs:
           GS_PASSWORD: ${{ secrets.GS_PASSWORD }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           CANVAS_ICS_URL: ${{ secrets.CANVAS_ICS_URL }}
+          NOTIFY_HOURS: ${{ vars.NOTIFY_HOURS }}
+          TIMEZONE: ${{ vars.TIMEZONE }}
+          COURSE_NICKNAMES: ${{ vars.COURSE_NICKNAMES }}
       - name: Save which notifications were sent
         run: |
           git config user.name "github-actions[bot]"
