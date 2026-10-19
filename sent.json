@@ -4,6 +4,7 @@
       "due": "2026-10-21T23:00:00-07:00",
       "name": "Homework #2",
       "sent": [
+        72.0,
         168.0
       ],
       "source": "gradescope"
@@ -12,6 +13,16 @@
       "due": "2026-10-21T21:59:00-07:00",
       "name": "Homework 2",
       "sent": [
+        72.0,
+        168.0
+      ],
+      "source": "gradescope"
+    },
+    "1416209:8895943": {
+      "due": "2026-10-21T23:59:00-07:00",
+      "name": "Group Project - Introduction Slides",
+      "sent": [
+        72.0,
         168.0
       ],
       "source": "gradescope"
