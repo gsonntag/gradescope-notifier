@@ -6,6 +6,12 @@
       "sent": [],
       "source": "gradescope"
     },
+    "1415616:8746144": {
+      "due": "2026-11-09T21:59:00-08:00",
+      "name": "Homework 3",
+      "sent": [],
+      "source": "gradescope"
+    },
     "1416209:8984058": {
       "due": "2026-11-15T23:59:00-08:00",
       "name": "Assignment 2 Software Security: Report",
@@ -22,6 +28,7 @@
       "due": "2026-11-04T01:00:00+00:00",
       "name": "Writing Assignment 2",
       "sent": [
+        24.0,
         48.0,
         72.0,
         168.0
