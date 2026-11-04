@@ -25,6 +25,7 @@ import sys
 import traceback
 from datetime import datetime, time, timezone
 from pathlib import Path
+from time import sleep
 from zoneinfo import ZoneInfo
 
 import requests
@@ -73,13 +74,30 @@ def push(topic, title, message, click_url=None, priority="high"):
     headers = {"Title": title, "Priority": priority}
     if click_url:
         headers["Click"] = click_url
-    resp = requests.post(
-        f"https://ntfy.sh/{topic}",
-        data=message.encode("utf-8"),
-        headers=headers,
-        timeout=15,
-    )
-    resp.raise_for_status()
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                f"https://ntfy.sh/{topic}",
+                data=message.encode("utf-8"),
+                headers=headers,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            return
+        except requests.RequestException:
+            if attempt == 2:
+                raise
+            sleep(5 * (attempt + 1))
+
+
+def try_push(*args, **kwargs):
+    """Push, but log failures instead of crashing so the rest of the run still saves state."""
+    try:
+        push(*args, **kwargs)
+        return True
+    except requests.RequestException:
+        traceback.print_exc()
+        return False
 
 
 def normalize(name):
@@ -252,13 +270,15 @@ def main():
         # setting this up doesn't announce every existing assignment as new.
         if a["key"] not in state and a["source"] in seeded:
             due_local = a["due"].astimezone(local_tz).strftime("%a %b %-d, %-I:%M %p")
-            push(
+            if not try_push(
                 topic,
                 title=f"New: {a['name']}",
                 message=f"{short_course_name(a['course'], nicknames)} · due {due_local}",
                 click_url=a["url"],
                 priority="default",
-            )
+            ):
+                failed = True
+                continue  # leave it out of state so it's announced next run
             print(f"New assignment: {a['course']} / {a['name']}")
         sent = state.get(a["key"], {})
         # If the due date changed (e.g. extension), reset what we've sent.
@@ -267,16 +287,18 @@ def main():
 
         crossed = [t for t in thresholds if hours_left <= t]
         if crossed and any(t not in sent["sent"] for t in crossed):
-            push(
+            if try_push(
                 topic,
                 title=f"Due in {time_left(hours_left)}: {a['name']}",
                 message=short_course_name(a["course"], nicknames),
                 click_url=a["url"],
                 # The last reminder before the deadline is the urgent one.
                 priority="urgent" if min(crossed) == thresholds[-1] else "high",
-            )
-            print(f"Notified: {a['course']} / {a['name']} ({hours_left:.1f}h left)")
-            sent["sent"] = sorted(set(sent["sent"]) | set(crossed))
+            ):
+                print(f"Notified: {a['course']} / {a['name']} ({hours_left:.1f}h left)")
+                sent["sent"] = sorted(set(sent["sent"]) | set(crossed))
+            else:
+                failed = True  # not marked sent, so it retries next run
         sent.update(name=a["name"], source=a["source"])
         state[a["key"]] = sent
 
