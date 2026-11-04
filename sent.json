@@ -26,20 +26,6 @@
       "sent": [],
       "source": "gradescope"
     },
-    "canvas:event-assignment-2049887": {
-      "due": "2026-11-04T01:00:00+00:00",
-      "name": "Writing Assignment 2",
-      "sent": [
-        3.0,
-        6.0,
-        12.0,
-        24.0,
-        48.0,
-        72.0,
-        168.0
-      ],
-      "source": "canvas"
-    },
     "canvas:event-assignment-2049889": {
       "due": "2026-11-21T01:00:00+00:00",
       "name": "Writing Assignment 3",
