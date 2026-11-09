@@ -10,6 +10,7 @@
       "due": "2026-11-09T21:59:00-08:00",
       "name": "Homework 3",
       "sent": [
+        24.0,
         48.0,
         72.0,
         168.0
@@ -19,13 +20,17 @@
     "1416209:8984058": {
       "due": "2026-11-15T23:59:00-08:00",
       "name": "Assignment 2 Software Security: Report",
-      "sent": [],
+      "sent": [
+        168.0
+      ],
       "source": "gradescope"
     },
     "1416209:8984078": {
       "due": "2026-11-15T23:59:00-08:00",
       "name": "Assignment 2 Software Security: Code",
-      "sent": [],
+      "sent": [
+        168.0
+      ],
       "source": "gradescope"
     },
     "canvas:event-assignment-2049889": {
